@@ -155,7 +155,7 @@ Tested on:
 - Intel Centrino Bluetooth Wireless Transceiver (ID 8087:07da)
 - Linux Mint 22.2 (Ubuntu 24.04)
 - AirPods Pro
-- Bose SoundLink
+- Bose QuietComfort 35 II
 
 ## Troubleshooting
 

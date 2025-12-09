@@ -9,7 +9,9 @@ Two separate issues can cause this:
 ### Issue 1: HFP Profile Conflicts (Fixed)
 Wireplumber attempts to negotiate HFP (Hands-Free Profile) with Bluetooth devices even though HFP is disabled in the Bluez daemon. This creates conflicting connection states that degrade audio quality over time.
 
-**Solution:** Disable HFP entirely in Wireplumber's configuration.
+Some devices (notably Bose QuietComfort 35 II) actively advertise Headset and Handsfree UUIDs even after plugins are disabled, causing bluetoothd to repeatedly try to use these profiles.
+
+**Solution:** Disable HFP entirely in Wireplumber's configuration and block problematic UUIDs in Bluetooth's main.conf.
 
 ### Issue 2: Bluetooth Driver Settings (Fixed)
 On Intel Centrino Bluetooth adapters (ID 8087:07da), the Enhanced Retransmission Mode (ERTM) and autosuspend in the Bluetooth driver cause link layer timeouts and connection failures.
@@ -49,7 +51,59 @@ sudo modprobe btusb
 sudo systemctl restart bluetooth
 ```
 
-### Step 3: Re-pair Devices
+### Step 2: Fix Bluetooth Driver Settings
+
+Create/edit the driver config:
+```bash
+sudo nano /etc/modprobe.d/bluetooth.conf
+```
+
+Add:
+```
+options btusb disable_autosuspend=1
+options bluetooth disable_ertm=1
+options btusb enable_autosuspend=0
+options hci_usb disable_sco=1
+```
+
+Reload the driver:
+```bash
+sudo modprobe -r btusb
+sudo modprobe btusb
+sudo systemctl restart bluetooth
+```
+
+### Step 3: Block Problematic UUIDs (For Devices Like Bose QC35 II)
+
+Some devices (especially Bose QuietComfort 35 II) advertise Headset and Handsfree UUIDs even though these profiles are disabled. This causes bluetoothd to repeatedly try using these profiles, causing stuttering.
+
+Edit the Bluetooth configuration:
+```bash
+sudo nano /etc/bluetooth/main.conf
+```
+
+Find the `[General]` section and add/modify:
+```
+[General]
+Disable=headset,gateway,hfp
+```
+
+Then scroll to the bottom and add a new section:
+```
+[BlockedUUIDs]
+# Block Headset and Handsfree profiles for devices that advertise them
+00001108-0000-1000-8000-00805f9b34fb=true
+0000111e-0000-1000-8000-00805f9b34fb=true
+```
+
+Save and restart:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart bluetooth
+systemctl --user restart wireplumber
+```
+
+### Step 4: Re-pair Devices
 
 ```bash
 bluetoothctl
@@ -110,3 +164,8 @@ Tested on:
 - Verify ERTM is disabled: `sudo modprobe -r btusb && sudo modprobe btusb`
 - Run `dmesg | grep -i timeout` - if you see "link tx timeout", the driver fix didn't load properly
 - Try restarting Bluetooth: `sudo systemctl restart bluetooth`
+
+**For Bose or similar devices that keep causing HFP errors:**
+- Check `/etc/bluetooth/main.conf` has the `[BlockedUUIDs]` section with the two UUIDs listed
+- Remove and re-pair the device: `bluetoothctl remove <mac>`
+- Check logs: `journalctl -f | grep -i "bluetooth\|audio"` - should not show HFP-related errors

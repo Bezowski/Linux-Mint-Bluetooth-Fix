@@ -73,32 +73,31 @@ sudo modprobe btusb
 sudo systemctl restart bluetooth
 ```
 
-### Step 3: Block Problematic UUIDs (For Devices Like Bose QC35 II)
+### Step 3: Disable Bluetooth Advertisement Monitor
 
-Some devices (especially Bose QuietComfort 35 II) advertise Headset and Handsfree UUIDs even though these profiles are disabled. This causes bluetoothd to repeatedly try using these profiles, causing stuttering.
+Some devices (especially AirPods) cause bluetoothd to crash during pairing due to a faulty advertisement monitor. Disable it:
 
 Edit the Bluetooth configuration:
 ```bash
 sudo nano /etc/bluetooth/main.conf
 ```
 
-Find the `[General]` section and add/modify:
+Modify the `[General]` section:
 ```
 [General]
 Disable=headset,gateway,hfp
+AutoConnect=false
+ControllerMode=bredr
 ```
 
-Then scroll to the bottom and add a new section:
+Add this new section at the bottom:
 ```
-[BlockedUUIDs]
-# Block Headset and Handsfree profiles for devices that advertise them
-00001108-0000-1000-8000-00805f9b34fb=true
-0000111e-0000-1000-8000-00805f9b34fb=true
+[AdvMonitor]
+Enabled=false
 ```
 
-Save and restart:
+Restart Bluetooth:
 ```bash
-sudo systemctl daemon-reload
 sudo systemctl restart bluetooth
 systemctl --user restart wireplumber
 ```
@@ -155,7 +154,7 @@ Tested on:
 - Intel Centrino Bluetooth Wireless Transceiver (ID 8087:07da)
 - Linux Mint 22.2 (Ubuntu 24.04)
 - AirPods Pro
-- Bose QuietComfort 35 II
+- Bose SoundLink
 
 ## Troubleshooting
 

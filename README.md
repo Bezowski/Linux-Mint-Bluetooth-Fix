@@ -1,22 +1,32 @@
 # Linux Mint 22.2 Bluetooth Audio Stuttering Fix
 
 ## Problem
+
 On Linux Mint 22.2 with PipeWire/Wireplumber, Bluetooth audio becomes choppy and stutters after a few hours of use.
 
 ## Root Causes
-Two separate issues can cause this:
+
+Three separate issues can cause this:
 
 ### Issue 1: HFP Profile Conflicts (Fixed)
+
 Wireplumber attempts to negotiate HFP (Hands-Free Profile) with Bluetooth devices even though HFP is disabled in the Bluez daemon. This creates conflicting connection states that degrade audio quality over time.
 
 Some devices (notably Bose QuietComfort 35 II) actively advertise Headset and Handsfree UUIDs even after plugins are disabled, causing bluetoothd to repeatedly try to use these profiles.
 
-**Solution:** Disable HFP entirely in Wireplumber's configuration and block problematic UUIDs in Bluetooth's main.conf.
+**Solution:** Disable HFP entirely in Wireplumber's configuration.
 
 ### Issue 2: Bluetooth Driver Settings (Fixed)
+
 On Intel Centrino Bluetooth adapters (ID 8087:07da), the Enhanced Retransmission Mode (ERTM) and autosuspend in the Bluetooth driver cause link layer timeouts and connection failures.
 
 **Solution:** Disable ERTM and autosuspend in the btusb driver configuration.
+
+### Issue 3: Advertisement Monitor Crashes (Fixed)
+
+Some devices (especially AirPods) cause bluetoothd to crash during pairing due to a faulty advertisement monitor.
+
+**Solution:** Disable the advertisement monitor in Bluetooth's main.conf.
 
 ## Installation
 
@@ -51,38 +61,14 @@ sudo modprobe btusb
 sudo systemctl restart bluetooth
 ```
 
-### Step 2: Fix Bluetooth Driver Settings
-
-Create/edit the driver config:
-```bash
-sudo nano /etc/modprobe.d/bluetooth.conf
-```
-
-Add:
-```
-options btusb disable_autosuspend=1
-options bluetooth disable_ertm=1
-options btusb enable_autosuspend=0
-options hci_usb disable_sco=1
-```
-
-Reload the driver:
-```bash
-sudo modprobe -r btusb
-sudo modprobe btusb
-sudo systemctl restart bluetooth
-```
-
 ### Step 3: Disable Bluetooth Advertisement Monitor
-
-Some devices (especially AirPods) cause bluetoothd to crash during pairing due to a faulty advertisement monitor. Disable it:
 
 Edit the Bluetooth configuration:
 ```bash
 sudo nano /etc/bluetooth/main.conf
 ```
 
-Modify the `[General]` section:
+Modify the `[General]` section to include:
 ```
 [General]
 Disable=headset,gateway,hfp
@@ -102,14 +88,17 @@ sudo systemctl restart bluetooth
 systemctl --user restart wireplumber
 ```
 
-### Step 4: Re-pair Devices
-
+### Step 4: Re-pair Your Devices
 ```bash
 bluetoothctl
-[bluetooth]# remove <device_mac>
 [bluetooth]# scan on
+```
+
+Wait for your device to appear in the scan results, then:
+```bash
 [bluetooth]# pair <device_mac>
 [bluetooth]# connect <device_mac>
+[bluetooth]# trust <device_mac>
 [bluetooth]# exit
 ```
 
@@ -131,6 +120,7 @@ dmesg | grep -i timeout
 ```
 
 You should NOT see:
+
 - "RFCOMM receive command but modem not available"
 - "Failure in Bluetooth audio transport"
 - "link tx timeout"
@@ -138,33 +128,61 @@ You should NOT see:
 ## What This Changes
 
 ### Wireplumber
+
 - **Disabled**: hfp_hf, hfp_ag, hsp_hs, hsp_ag (Hands-Free and Headset profiles)
 - **Enabled**: a2dp_sink, a2dp_source, bap_sink, bap_source (Stereo audio profiles)
 
 ### Bluetooth Driver
-- **Disabled**: ERTM (Enhanced Retransmission Mode) - incompatible with certain codecs
-- **Disabled**: Autosuspend - keeps adapter fully powered
-- **Disabled**: SCO (voice over Bluetooth) - not needed for audio streaming
 
-### Audio Codec
-- **Works fine**: All codecs (SBC-XQ, AAC, aptX, etc.) once driver is properly configured
+- **Disabled**: ERTM (Enhanced Retransmission Mode)
+- **Disabled**: Autosuspend (keeps adapter fully powered)
+- **Disabled**: SCO (voice over Bluetooth)
+
+### Bluetooth Daemon
+
+- **Disabled**: Advertisement Monitor (prevents bluetoothd crashes)
+- **Disabled**: Auto-Connect (prevents background reconnection attempts)
 
 ## Hardware Info
+
 Tested on:
+
 - Intel Centrino Bluetooth Wireless Transceiver (ID 8087:07da)
 - Linux Mint 22.2 (Ubuntu 24.04)
 - AirPods Pro
-- Bose SoundLink
+- Bose QuietComfort 35 Series II
+
+## Important Limitation
+
+Due to Intel Centrino adapter limitations, **only one Bluetooth audio device should be paired at a time**. Attempting to have multiple audio devices paired simultaneously causes link tx timeouts and stuttering.
+
+### Switching Between Devices
+
+Use Blueman Manager to switch:
+
+1. Right-click the connected device → **Disconnect**
+2. Right-click the device → **Remove** (unpair it)
+3. Right-click the new device you want to use → **Connect**
+
+This prevents the adapter from trying to maintain multiple connections simultaneously.
 
 ## Troubleshooting
 
 **Still getting stuttering?**
+
 - Check that the driver config was properly loaded: `cat /etc/modprobe.d/bluetooth.conf`
 - Verify ERTM is disabled: `sudo modprobe -r btusb && sudo modprobe btusb`
 - Run `dmesg | grep -i timeout` - if you see "link tx timeout", the driver fix didn't load properly
 - Try restarting Bluetooth: `sudo systemctl restart bluetooth`
 
-**For Bose or similar devices that keep causing HFP errors:**
-- Check `/etc/bluetooth/main.conf` has the `[BlockedUUIDs]` section with the two UUIDs listed
-- Remove and re-pair the device: `bluetoothctl remove <mac>`
-- Check logs: `journalctl -f | grep -i "bluetooth\|audio"` - should not show HFP-related errors
+**Can't pair devices?**
+
+- Make sure your device is in pairing mode (flashing light for AirPods, specific pairing mode for Bose)
+- Check bluetoothd logs: `journalctl -u bluetooth -n 50`
+- Disable VPN temporarily during pairing (VPN can interfere with Bluetooth pairing)
+
+**AirPods not showing in device list?**
+
+- Restart Bluetooth completely: `sudo systemctl restart bluetooth`
+- Check `/etc/bluetooth/main.conf` has `[AdvMonitor]` section with `Enabled=false`
+- If still having issues, do a full Bluetooth reset: `sudo systemctl stop bluetooth && sudo rm -rf /var/lib/bluetooth/* && sudo systemctl start bluetooth`

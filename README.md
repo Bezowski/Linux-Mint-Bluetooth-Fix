@@ -71,9 +71,12 @@ sudo nano /etc/bluetooth/main.conf
 Modify the `[General]` section to include:
 ```
 [General]
-Disable=headset,gateway,hfp
+Disable=headset,gateway,hfp,messages,mms,pbap,nap,dun,avctp
 AutoConnect=false
 ControllerMode=bredr
+DiscoverableTimeout=0
+AdvMonAllowedUUIDs=
+BRTimeout=60
 ```
 
 Add this new section at the bottom:

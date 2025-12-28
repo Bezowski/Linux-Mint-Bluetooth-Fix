@@ -43,7 +43,7 @@ systemctl --user restart wireplumber
 
 Create/edit the driver config:
 ```bash
-sudo nano /etc/modprobe.d/bluetooth.conf
+sudo xed /etc/modprobe.d/bluetooth.conf
 ```
 
 Add:
@@ -65,7 +65,7 @@ sudo systemctl restart bluetooth
 
 Edit the Bluetooth configuration:
 ```bash
-sudo nano /etc/bluetooth/main.conf
+sudo xed /etc/bluetooth/main.conf
 ```
 
 Modify the `[General]` section to include:
